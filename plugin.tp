@@ -1,0 +1,14 @@
+{
+  "sdk": 12,
+  "version": 1,
+  "name": "TITS Plugin",
+  "id": "tits.connector",
+  "configuration": {
+    "colorDark": "#222222",
+    "colorLight": "#444444",
+    "parentCategory": "misc"
+  },
+  "plugin_start_cmd": "tp-TITS.exe",
+  "categories": [],
+  "settings": []
+}

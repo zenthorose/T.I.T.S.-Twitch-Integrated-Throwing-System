@@ -1,0 +1,123 @@
+{
+  "api": 12,
+  "version": 1,
+  "name": "TITS Plugin",
+  "id": "tits.connector",
+  "description": "A Touch Portal plugin that connects to T.I.T.S. (This Is The Stream) via WebSocket for triggering VTuber interactions.",
+  "configuration": {
+    "colorDark": "#222222",
+    "colorLight": "#444444",
+    "parentCategory": "misc"
+  },
+  "plugin_start_cmd": "node \"%TP_PLUGIN_FOLDER%TITS-Plugin\\index.js\"",
+  "categories": [
+    {
+      "id": "tits.cat",
+      "name": "TITS Tools",
+      "imagepath": "%TP_PLUGIN_FOLDER%TITS-Plugin\\TITS-Icon.png",
+      "actions": [
+        {
+          "id": "tits.sayHi",
+          "name": "Say Hi",
+          "prefix": "TITS",
+          "type": "communicate",
+          "tryInline": true,
+          "format": "Send a test Hi message to Touch Portal logs",
+          "execution_cmd":"powershell [console]::beep(200,500)",
+          "data": []
+        },
+        {
+          "id": "tits.throwItem",
+          "name": "Throw Item",
+          "prefix": "TITS",
+          "type": "communicate",
+          "tryInline": true,
+          "format": "Throw {$item$} at VTuber x{$amountOfThrows$} (delay {$delayTime$}s)",
+          "data": [
+            {
+              "id": "item",
+              "type": "choice",
+              "label": "Item",
+              "default": "Loading...",
+              "valueChoices": ["Loading..."]
+            },
+            {
+              "id": "amountOfThrows",
+              "type": "text",
+              "label": "Amount of Throws",
+              "default": "1",
+              "description": "How many times to throw"
+            },
+            {
+              "id": "delayTime",
+              "type": "text",
+              "label": "Delay Time (seconds)",
+              "default": "0.05",
+              "description": "Delay between throws"
+            },
+            {
+              "id": "errorOnMissingID",
+              "type": "choice",
+              "label": "Error on Missing ID",
+              "default": "false",
+              "valueChoices": ["true", "false"],
+              "description": "Throw error if item ID is missing"
+            }
+          ]
+        },
+        {
+          "id": "tits.getMessages",
+          "name": "Get Messages",
+          "prefix": "TITS",
+          "type": "communicate",
+          "tryInline": true,
+          "format": "Fetch available messages",
+          "data": []
+        },
+        {
+          "id": "tits.refreshItems",
+          "name": "Refresh Item List",
+          "prefix": "TITS",
+          "type": "communicate",
+          "tryInline": true,
+          "format": "Refresh T.I.T.S. item list",
+          "data": []
+        },
+        {
+          "id": "tits.loadItems",
+          "name": "Load Items",
+          "prefix": "TITS",
+          "type": "communicate",
+          "tryInline": true,
+          "format": "Update drop down list for items",
+          "data": []
+        }
+      ],
+      "states": [
+        {
+          "id": "tits.lastMessage",
+          "type": "text",
+          "default": "",
+          "desc": "Latest message received from TITS API"
+        }
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "id": "tits",
+      "type": "text",
+      "label": "Notes",
+      "default": "",
+      "description": "This plugin connects to T.I.T.S. (Twitch Integrated Throwing Software)."
+    },
+    {
+      "id": "debug",
+      "type": "choice",
+      "label": "Enable Debug Logging",
+      "default": "true",
+      "valueChoices": ["true", "false"],
+      "description": "Enable extra console logs for debugging"
+    }
+  ]
+}

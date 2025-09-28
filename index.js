@@ -4,6 +4,7 @@
 // IMPORTS
 // -------------------------
 const fs = require("fs");
+const net = require("net");
 const WebSocket = require("ws");
 
 // -------------------------
@@ -12,16 +13,19 @@ const WebSocket = require("ws");
 const PLUGIN_ID = "tits.connector";
 const LOG_FILE = "plugin-debug.log";
 const TITS_WS_URL = "ws://127.0.0.1:42069/websocket";
+const TP_HOST = "127.0.0.1";
+const TP_PORT = 12136;
 
 let titsClient = null;
+let tpClient = null; // Touch Portal socket client
 
 // -------------------------
 // LOGGING HELPER
 // -------------------------
 function logMessage(level, msg, data = null) {
   const timestamp = new Date().toISOString();
-  const line = `[${timestamp}] [${level.toUpperCase()}] ${msg} ${
-    data ? JSON.stringify(data) : ""
+  const line = `[${timestamp}] [${level.toUpperCase()}] ${msg}${
+    data ? " " + JSON.stringify(data) : ""
   }`;
 
   console.log(line);
@@ -29,7 +33,6 @@ function logMessage(level, msg, data = null) {
     fs.appendFileSync(LOG_FILE, line + "\n");
   } catch {}
 
-  // also send log to TP
   sendToTP({
     type: "log",
     level,
@@ -38,100 +41,127 @@ function logMessage(level, msg, data = null) {
 }
 
 // -------------------------
-// TOUCH PORTAL CONNECTION (STDIN/STDOUT)
+// TOUCH PORTAL CONNECTION (DYNAMIC SOCKET)
 // -------------------------
+function connectToTouchPortal() {
+  tpClient = new net.Socket();
+
+  tpClient.connect(TP_PORT, TP_HOST, () => {
+    logMessage("info", `Connected to Touch Portal socket on ${TP_HOST}:${TP_PORT}`);
+
+    // Send pairing request
+    sendToTP({
+      type: "pair",
+      id: PLUGIN_ID,
+    });
+    logMessage("info", "Sent pair request to Touch Portal");
+  });
+
+  tpClient.on("data", (chunk) => {
+    const lines = chunk.toString().split("\n").filter(Boolean);
+    for (const line of lines) {
+      try {
+        const msg = JSON.parse(line);
+        logMessage("debug", "Received from TP", msg);
+
+        if (msg.type === "info") {
+          logMessage("info", "Pairing successful with Touch Portal", msg);
+        }
+
+        if (msg.type === "action") {
+          const { actionId } = msg;
+          logMessage("info", "Action received from TP", {
+            actionId,
+            payload: msg.data || null,
+          });
+
+          handleAction(actionId, msg.data || {});
+        }
+      } catch (err) {
+        logMessage("error", "Failed to parse TP message", {
+          err: err.message,
+          raw: line,
+        });
+      }
+    }
+  });
+
+  tpClient.on("close", () => {
+    logMessage("warn", "Disconnected from Touch Portal, retrying in 5s...");
+    setTimeout(connectToTouchPortal, 5000);
+  });
+
+  tpClient.on("error", (err) => {
+    logMessage("error", "Touch Portal socket error", { err: err.message });
+  });
+}
+
 function sendToTP(obj) {
+  if (!tpClient) return;
   try {
-    process.stdout.write(JSON.stringify(obj) + "\n");
+    tpClient.write(JSON.stringify(obj) + "\n");
   } catch (err) {
     console.error("Failed to send to TP", err.message);
   }
 }
 
-process.stdin.on("data", (chunk) => {
-  const lines = chunk.toString().split("\n").filter(Boolean);
-  for (const line of lines) {
-    try {
-      const msg = JSON.parse(line);
-      logMessage("debug", "Received from TP", msg);
+// -------------------------
+// ACTION HANDLER
+// -------------------------
+function handleAction(actionId, data) {
+  switch (actionId) {
+    case "tits.sayHi":
+      logMessage("info", "Hi from tits.sayHi action");
+      break;
 
-      if (msg.type === "info") {
-        // Send plugin info back after pairing
-        sendToTP({
-          type: "plugin_info",
-          pluginId: PLUGIN_ID,
-          version: "0.0.1",
-          sdk: 6,
+    case "tits.loadItems":
+      try {
+        const rawItems = fs.readFileSync("items_list.txt", "utf8");
+        const items = JSON.parse(rawItems);
+        items
+          .map((i) => i.itemName || i.name || i.id)
+          .forEach((name) =>
+            sendToTP({
+              type: "log",
+              level: "info",
+              message: `Item: ${name}`,
+            })
+          );
+        logMessage("info", `Printed ${items.length} items to Touch Portal`);
+      } catch (err) {
+        logMessage("error", "Failed to load items from file", {
+          err: err.message,
         });
-        logMessage("info", "Sent plugin_info back to TP");
       }
+      break;
 
-      if (msg.type === "action") {
-        const { actionId } = msg;
-        logMessage("info", "Action received from TP", {
-          actionId,
-          payload: msg.data || null,
-        });
-
-        switch (actionId) {
-          case "tits.sayHi":
-            logMessage("info", "Hi"); // <--- our simple test
-            break;
-
-          case "tits.loadItems":
-            try {
-              const rawItems = fs.readFileSync("items_list.txt", "utf8");
-              const items = JSON.parse(rawItems);
-              items
-                .map((i) => i.itemName || i.name || i.id)
-                .forEach((name) =>
-                  sendToTP({
-                    type: "log",
-                    level: "info",
-                    message: `Item: ${name}`,
-                  })
-                );
-              logMessage("info", `Printed ${items.length} items to Touch Portal`);
-            } catch (err) {
-              logMessage("error", "Failed to load items from file", {
-                err: err.message,
-              });
-            }
-            break;
-
-          case "tits.refreshItems":
-            if (titsClient && titsClient.readyState === WebSocket.OPEN) {
-              titsClient.send(
-                JSON.stringify({
-                  apiName: "TITSPublicApi",
-                  apiVersion: "1.0",
-                  messageType: "TITSItemListRequest",
-                })
-              );
-              logMessage("info", "Requested new item list from TITS");
-            }
-            break;
-
-          case "tits.getMessages":
-            logMessage("info", "tits.getMessages action triggered (placeholder)");
-            break;
-
-          case "tits.throwItem":
-            logMessage("info", "tits.throwItem action triggered (placeholder)");
-            break;
-
-          default:
-            logMessage("warn", "Unknown action received", { actionId });
-        }
+    case "tits.refreshItems":
+      if (titsClient && titsClient.readyState === WebSocket.OPEN) {
+        titsClient.send(
+          JSON.stringify({
+            apiName: "TITSPublicApi",
+            apiVersion: "1.0",
+            messageType: "TITSItemListRequest",
+          })
+        );
+        logMessage("info", "Requested new item list from TITS");
+      } else {
+        logMessage("warn", "TITS WebSocket not open, cannot refresh items");
       }
-    } catch (err) {
-      logMessage("error", "Failed to parse TP message", {
-        err: err.message,
-        raw: line,
-      });
-    }
+      break;
+
+    case "tits.getMessages":
+      logMessage("info", "tits.getMessages action triggered (placeholder)");
+      break;
+
+    case "tits.throwItem":
+      logMessage("info", "tits.throwItem action triggered (placeholder)");
+      break;
+
+    default:
+      logMessage("warn", "Unknown action received", { actionId });
   }
-});
+}
 
 // -------------------------
 // TITS WEBSOCKET CONNECTION
@@ -172,7 +202,11 @@ function connectToTITS() {
     }
   });
 
-  titsClient.on("close", () => logMessage("warn", "Disconnected from TITS"));
+  titsClient.on("close", () => {
+    logMessage("warn", "Disconnected from TITS, retrying in 5s...");
+    setTimeout(connectToTITS, 5000);
+  });
+
   titsClient.on("error", (err) =>
     logMessage("error", "TITS WebSocket error", { err: err.message })
   );
@@ -188,8 +222,6 @@ setInterval(() => {
 // -------------------------
 // START PLUGIN
 // -------------------------
+connectToTouchPortal();
 connectToTITS();
-logMessage(
-  "info",
-  "TITS Plugin started and waiting for Touch Portal messages..."
-);
+logMessage("info", "TITS Plugin started (dynamic mode) and waiting for Touch Portal messages...");

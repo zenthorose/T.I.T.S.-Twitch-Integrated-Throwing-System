@@ -18,15 +18,14 @@ const TP_PORT = 12136;
 
 let titsClient = null;
 let tpClient = null; // Touch Portal socket client
+let cachedItems = []; // store items for throwItem choices
 
 // -------------------------
 // LOGGING HELPER
 // -------------------------
 function logMessage(level, msg, data = null) {
   const timestamp = new Date().toISOString();
-  const line = `[${timestamp}] [${level.toUpperCase()}] ${msg}${
-    data ? " " + JSON.stringify(data) : ""
-  }`;
+  const line = `[${timestamp}] [${level.toUpperCase()}] ${msg}${data ? " " + JSON.stringify(data) : ""}`;
 
   console.log(line);
   try {
@@ -36,12 +35,12 @@ function logMessage(level, msg, data = null) {
   sendToTP({
     type: "log",
     level,
-    message: msg + (data ? " " + JSON.stringify(data) : ""),
+    message: msg + (data ? " " + JSON.stringify(data) : "")
   });
 }
 
 // -------------------------
-// TOUCH PORTAL CONNECTION (DYNAMIC SOCKET)
+// TOUCH PORTAL CONNECTION
 // -------------------------
 function connectToTouchPortal() {
   tpClient = new net.Socket();
@@ -52,9 +51,9 @@ function connectToTouchPortal() {
     // Send pairing request
     sendToTP({
       type: "pair",
-      id: PLUGIN_ID,
+      id: PLUGIN_ID
     });
-    logMessage("info", "Sent pair request to Touch Portal");
+    //logMessage("info", "Sent pair request to Touch Portal");
   });
 
   tpClient.on("data", (chunk) => {
@@ -62,26 +61,17 @@ function connectToTouchPortal() {
     for (const line of lines) {
       try {
         const msg = JSON.parse(line);
-        logMessage("debug", "Received from TP", msg);
+        //logMessage("debug", "Received from TP", msg);
 
         if (msg.type === "info") {
-          logMessage("info", "Pairing successful with Touch Portal", msg);
+          //logMessage("info", "Pairing successful with Touch Portal", msg);
         }
 
         if (msg.type === "action") {
-          const { actionId } = msg;
-          logMessage("info", "Action received from TP", {
-            actionId,
-            payload: msg.data || null,
-          });
-
-          handleAction(actionId, msg.data || {});
+          handleAction(msg.actionId, msg.data || {});
         }
       } catch (err) {
-        logMessage("error", "Failed to parse TP message", {
-          err: err.message,
-          raw: line,
-        });
+        logMessage("error", "Failed to parse TP message", { err: err.message, raw: line });
       }
     }
   });
@@ -106,6 +96,29 @@ function sendToTP(obj) {
 }
 
 // -------------------------
+// UPDATE THROW ITEM CHOICES
+// -------------------------
+function updateThrowItemChoices(items) {
+  logMessage("info","Attempting to update throw item");
+  const itemNames = items.map(i => i.itemName || i.name || i.id);
+
+  sendToTP({
+    //type: "updateActionData",
+    //pluginId: PLUGIN_ID,
+    //instanceId: "tits.throwItem.item",
+    //choices: itemNames,
+
+    
+    "type":"choiceUpdate",
+    "id":"item",
+    "value":itemNames
+
+  });
+
+  logMessage("info", `Updated tits.throwItem choices with ${itemNames.length} items`, itemNames);
+}
+
+// -------------------------
 // ACTION HANDLER
 // -------------------------
 function handleAction(actionId, data) {
@@ -114,36 +127,13 @@ function handleAction(actionId, data) {
       logMessage("info", "Hi from tits.sayHi action");
       break;
 
-    case "tits.loadItems":
-      try {
-        const rawItems = fs.readFileSync("items_list.txt", "utf8");
-        const items = JSON.parse(rawItems);
-        items
-          .map((i) => i.itemName || i.name || i.id)
-          .forEach((name) =>
-            sendToTP({
-              type: "log",
-              level: "info",
-              message: `Item: ${name}`,
-            })
-          );
-        logMessage("info", `Printed ${items.length} items to Touch Portal`);
-      } catch (err) {
-        logMessage("error", "Failed to load items from file", {
-          err: err.message,
-        });
-      }
-      break;
-
     case "tits.refreshItems":
       if (titsClient && titsClient.readyState === WebSocket.OPEN) {
-        titsClient.send(
-          JSON.stringify({
-            apiName: "TITSPublicApi",
-            apiVersion: "1.0",
-            messageType: "TITSItemListRequest",
-          })
-        );
+        titsClient.send(JSON.stringify({
+          apiName: "TITSPublicApi",
+          apiVersion: "1.0",
+          messageType: "TITSItemListRequest"
+        }));
         logMessage("info", "Requested new item list from TITS");
       } else {
         logMessage("warn", "TITS WebSocket not open, cannot refresh items");
@@ -154,9 +144,33 @@ function handleAction(actionId, data) {
       logMessage("info", "tits.getMessages action triggered (placeholder)");
       break;
 
-    case "tits.throwItem":
-      logMessage("info", "tits.throwItem action triggered (placeholder)");
+    case "tits.throwItem": {
+      const item = data.find(d => d.id === "item")?.value || "";
+      const amount = parseInt(data.find(d => d.id === "amountOfThrows")?.value || "1", 10);
+      const delay = parseFloat(data.find(d => d.id === "delayTime")?.value || "0.05");
+      const errorOnMissingID = (data.find(d => d.id === "errorOnMissingID")?.value || "false") === "true";
+
+      logMessage("info", "tits.throwItem triggered", { item, amount, delay, errorOnMissingID });
+
+      if (!item) {
+        logMessage("warn", "No item specified in tits.throwItem payload");
+        return;
+      }
+
+      if (titsClient && titsClient.readyState === WebSocket.OPEN) {
+        titsClient.send(JSON.stringify({
+          apiName: "TITSPublicApi",
+          apiVersion: "1.0",
+          messageType: "TITSThrowItemRequest",
+          data: { itemName: item, amountOfThrows: amount, delayTime: delay, errorOnMissingID }
+        }));
+
+        //logMessage("info", `Sent throwItem request to TITS`, { item, amount, delay, errorOnMissingID });
+      } else {
+        logMessage("warn", "TITS WebSocket not open, cannot send throwItem request");
+      }
       break;
+    }
 
     default:
       logMessage("warn", "Unknown action received", { actionId });
@@ -173,31 +187,39 @@ function connectToTITS() {
     logMessage("info", "Connected to TITS WebSocket");
 
     // Request item list at startup
-    titsClient.send(
-      JSON.stringify({
-        apiName: "TITSPublicApi",
-        apiVersion: "1.0",
-        messageType: "TITSItemListRequest",
-      })
-    );
+    titsClient.send(JSON.stringify({
+      apiName: "TITSPublicApi",
+      apiVersion: "1.0",
+      messageType: "TITSItemListRequest"
+    }));
   });
 
   titsClient.on("message", (data) => {
     try {
-      const msg = JSON.parse(data);
+      // Convert buffer to string
+      let text = data.toString().trim();
+
+      // Some TITS responses are double-encoded JSON, so unwrap once if needed
+      if (text.startsWith('"') && text.endsWith('"')) {
+        text = text.slice(1, -1).replace(/\\"/g, '"');
+      }
+
+      const msg = JSON.parse(text);
       logMessage("debug", "Received from TITS", msg);
 
       if (msg.messageType === "TITSItemListResponse" && msg.data?.items) {
-        logMessage("info", `Got ${msg.data.items.length} items from TITS`);
-        fs.writeFileSync(
-          "items_list.txt",
-          JSON.stringify(msg.data.items, null, 2)
-        );
+        cachedItems = msg.data.items;
+
+        fs.writeFileSync("items_list.txt", JSON.stringify(cachedItems, null, 2));
+        logMessage("info", `Got ${cachedItems.length} items from TITS`);
+
+        // Update Touch Portal choices immediately
+        updateThrowItemChoices(cachedItems);
       }
     } catch (err) {
       logMessage("error", "Failed to parse TITS data", {
         data: data.toString(),
-        err: err.message,
+        err: err.message
       });
     }
   });
@@ -207,17 +229,10 @@ function connectToTITS() {
     setTimeout(connectToTITS, 5000);
   });
 
-  titsClient.on("error", (err) =>
-    logMessage("error", "TITS WebSocket error", { err: err.message })
-  );
+  titsClient.on("error", (err) => {
+    logMessage("error", "TITS WebSocket error", { err: err.message });
+  });
 }
-
-// -------------------------
-// HEARTBEAT / PING
-// -------------------------
-setInterval(() => {
-  logMessage("info", "Heartbeat: plugin alive and waiting for actions...");
-}, 10000);
 
 // -------------------------
 // START PLUGIN

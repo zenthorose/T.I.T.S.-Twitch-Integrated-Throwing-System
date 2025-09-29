@@ -23,7 +23,6 @@
           "type": "communicate",
           "tryInline": true,
           "format": "Send a test Hi message to Touch Portal logs",
-          "execution_cmd":"powershell [console]::beep(200,500)",
           "data": []
         },
         {
@@ -32,14 +31,14 @@
           "prefix": "TITS",
           "type": "communicate",
           "tryInline": true,
-          "format": "Throw {$item$} at VTuber x{$amountOfThrows$} (delay {$delayTime$}s)",
+          "format": "Throw Item:{$item$} Amount:{$amountOfThrows$} delay in seconds:{$delayTime$}",
           "data": [
             {
               "id": "item",
               "type": "choice",
               "label": "Item",
               "default": "Loading...",
-              "valueChoices": ["Loading..."]
+              "valueChoices": [],
             },
             {
               "id": "amountOfThrows",
@@ -81,15 +80,6 @@
           "type": "communicate",
           "tryInline": true,
           "format": "Refresh T.I.T.S. item list",
-          "data": []
-        },
-        {
-          "id": "tits.loadItems",
-          "name": "Load Items",
-          "prefix": "TITS",
-          "type": "communicate",
-          "tryInline": true,
-          "format": "Update drop down list for items",
           "data": []
         }
       ],

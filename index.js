@@ -123,10 +123,6 @@ function updateThrowItemChoices(items) {
 // -------------------------
 function handleAction(actionId, data) {
   switch (actionId) {
-    case "tits.sayHi":
-      logMessage("info", "Hi from tits.sayHi action");
-      break;
-
     case "tits.refreshItems":
       if (titsClient && titsClient.readyState === WebSocket.OPEN) {
         titsClient.send(JSON.stringify({
@@ -138,10 +134,6 @@ function handleAction(actionId, data) {
       } else {
         logMessage("warn", "TITS WebSocket not open, cannot refresh items");
       }
-      break;
-
-    case "tits.getMessages":
-      logMessage("info", "tits.getMessages action triggered (placeholder)");
       break;
 
     case "tits.throwItem": {

@@ -17,15 +17,6 @@
       "imagepath": "%TP_PLUGIN_FOLDER%TITS-Plugin\\TITS-Icon.png",
       "actions": [
         {
-          "id": "tits.sayHi",
-          "name": "Say Hi",
-          "prefix": "TITS",
-          "type": "communicate",
-          "tryInline": true,
-          "format": "Send a test Hi message to Touch Portal logs",
-          "data": []
-        },
-        {
           "id": "tits.throwItem",
           "name": "Throw Item",
           "prefix": "TITS",
@@ -63,15 +54,6 @@
               "description": "Throw error if item ID is missing"
             }
           ]
-        },
-        {
-          "id": "tits.getMessages",
-          "name": "Get Messages",
-          "prefix": "TITS",
-          "type": "communicate",
-          "tryInline": true,
-          "format": "Fetch available messages",
-          "data": []
         },
         {
           "id": "tits.refreshItems",

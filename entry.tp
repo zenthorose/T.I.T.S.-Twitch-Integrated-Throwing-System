@@ -56,6 +56,45 @@
           ]
         },
         {
+          "id": "tits.throwItems",
+          "name": "Throw Items",
+          "prefix": "TITS",
+          "type": "communicate",
+          "tryInline": true,
+          "format": "Throw Items:{$items$} Amount:{$amountOfThrows$} delay in seconds:{$delayTime$}",
+          "data": [
+            {
+              "id": "items",
+              "type": "text",
+              "label": "Items",
+              "default": "",
+              "description": "List of items to throw. Set commas between each one"
+            },
+            {
+              "id": "amountOfThrows",
+              "type": "text",
+              "label": "Amount of Throws",
+              "default": "1",
+              "description": "How many times to throw"
+            },
+            {
+              "id": "delayTime",
+              "type": "text",
+              "label": "Delay Time (seconds)",
+              "default": "0.05",
+              "description": "Delay between throws"
+            },
+            {
+              "id": "errorOnMissingID",
+              "type": "choice",
+              "label": "Error on Missing ID",
+              "default": "false",
+              "valueChoices": ["true", "false"],
+              "description": "Throw error if item ID is missing"
+            }
+          ]
+        },
+        {
           "id": "tits.refreshItems",
           "name": "Refresh Item List",
           "prefix": "TITS",
@@ -65,14 +104,6 @@
           "data": []
         }
       ],
-      "states": [
-        {
-          "id": "tits.lastMessage",
-          "type": "text",
-          "default": "",
-          "desc": "Latest message received from TITS API"
-        }
-      ]
     }
   ],
   "settings": [

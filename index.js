@@ -17,8 +17,9 @@ const TP_HOST = "127.0.0.1";
 const TP_PORT = 12136;
 
 let titsClient = null;
-let tpClient = null; // Touch Portal socket client
-let cachedItems = []; // store items for throwItem choices
+let tpClient = null;
+let cachedItems = [];
+let cachedTriggers = [];
 
 // -------------------------
 // LOGGING HELPER
@@ -34,6 +35,7 @@ function logMessage(level, msg, data = null) {
     fs.appendFileSync(LOG_FILE, line + "\n");
   } catch {}
 
+  // Forward to Touch Portal (non-fatal if not connected)
   sendToTP({
     type: "log",
     level,
@@ -48,13 +50,8 @@ function connectToTouchPortal() {
   tpClient = new net.Socket();
 
   tpClient.connect(TP_PORT, TP_HOST, () => {
-    logMessage("info", `Connected to Touch Portal socket on ${TP_HOST}:${TP_PORT}`);
-
-    // Send pairing request
-    sendToTP({
-      type: "pair",
-      id: PLUGIN_ID
-    });
+    logMessage("info", `Connected to Touch Portal on ${TP_HOST}:${TP_PORT}`);
+    sendToTP({ type: "pair", id: PLUGIN_ID });
   });
 
   tpClient.on("data", (chunk) => {
@@ -62,15 +59,13 @@ function connectToTouchPortal() {
     for (const line of lines) {
       try {
         const msg = JSON.parse(line);
-
         if (msg.type === "action") {
           handleAction(msg.actionId, msg.data || {});
+        } else {
+          logMessage("debug", "TP ->", msg);
         }
       } catch (err) {
-        logMessage("error", "Failed to parse TP message", {
-          err: err.message,
-          raw: line
-        });
+        logMessage("error", "Failed to parse TP message", { err: err.message, raw: line });
       }
     }
   });
@@ -90,44 +85,106 @@ function sendToTP(obj) {
   try {
     tpClient.write(JSON.stringify(obj) + "\n");
   } catch (err) {
+    // keep logging locally if TP write fails
     console.error("Failed to send to TP", err.message);
   }
 }
 
 // -------------------------
-// UPDATE THROW ITEM CHOICES
+// UTIL
 // -------------------------
+function sanitizeId(name) {
+  if (!name) return "";
+  return name.replace(/[^\w\-]+/g, "_").replace(/^_+|_+$/g, "").substring(0, 64);
+}
+
+// -------------------------
+// UPDATE ITEMS
+// -------------------------
+// Writes items_list.txt as "name : id" lines, updates choice list and creates states
 function updateThrowItemChoices(items) {
-  const itemNames = items.map((i) => i.itemName || i.name || i.id);
+  if (!Array.isArray(items)) items = [];
+  cachedItems = items;
 
-  sendToTP({
-    type: "choiceUpdate",
-    id: "item",
-    value: itemNames
-  });
+  const itemNames = items.map((i) => i.itemName || i.name || i.id || "");
 
-  logMessage(
-    "info",
-    `Updated tits.throwItem choices with ${itemNames.length} items`,
-    itemNames
-  );
+  // Update TP choice list for single-item actions
+  sendToTP({ type: "choiceUpdate", id: "item", value: itemNames });
+  logMessage("info", `Updated tits.throwItem choices with ${itemNames.length} items`);
 
-  // Create Touch Portal states for each item
+  // Persist items_list.txt in "name : id" format (like triggers_list)
+  try {
+    const lines = items.map((i) => {
+      const name = i.itemName || i.name || i.id || "";
+      const id = i.ID || i.id || "";
+      return `${name} : ${id}`;
+    });
+    fs.writeFileSync("items_list.txt", lines.join("\n"), "utf8");
+    logMessage("info", `Wrote ${lines.length} items to items_list.txt`);
+  } catch (err) {
+    logMessage("error", "Failed to write items_list.txt", err.message);
+  }
+
+  // Create TP states for each item
   for (const item of items) {
-    const stateId = (item.itemName || item.name || item.id || "").replace(/\s+/g, "_");
+    const rawName = item.itemName || item.name || item.id || "";
+    const stateId = sanitizeId(rawName);
     const itemId = item.ID || item.id || "";
     if (!stateId || !itemId) continue;
 
     sendToTP({
       type: "createState",
       id: stateId,
-      desc: `${item.itemName || item.name}`,
+      desc: rawName,
       defaultValue: itemId,
       forceUpdate: false,
       parentGroup: "Throwables"
     });
+  }
+}
 
-    logMessage("info", `Created state for item: ${stateId}`, { defaultValue: itemId });
+// -------------------------
+// UPDATE TRIGGERS
+// -------------------------
+function updateTriggerStates(triggers) {
+  if (!Array.isArray(triggers)) triggers = [];
+  cachedTriggers = triggers;
+
+  logMessage("info", `Updating ${triggers.length} triggers`);
+
+  // Write triggers_list.txt in "name : id" format
+  try {
+    const lines = triggers.map((t) => {
+      const name = t.name || t.displayName || t.id || "";
+      const id = t.id || t.ID || "";
+      return `${name} : ${id}`;
+    });
+    fs.writeFileSync("triggers_list.txt", lines.join("\n"), "utf8");
+    logMessage("info", `Wrote ${lines.length} triggers to triggers_list.txt`);
+  } catch (err) {
+    logMessage("error", "Failed to write triggers_list.txt", err.message);
+  }
+
+  // Update TP choice list for trigger selection (single select)
+  const triggerNames = triggers.map((t) => t.displayName || t.name || t.id || "");
+  sendToTP({ type: "choiceUpdate", id: "trigger", value: triggerNames });
+  logMessage("info", `Updated trigger choice list with ${triggerNames.length} entries`);
+
+  // Create TP states for each trigger
+  for (const trigger of triggers) {
+    const rawName = trigger.name || trigger.displayName || trigger.id || "";
+    const stateId = sanitizeId(rawName);
+    const triggerId = trigger.id || trigger.ID || "";
+    if (!stateId || !triggerId) continue;
+
+    sendToTP({
+      type: "createState",
+      id: stateId,
+      desc: rawName,
+      defaultValue: triggerId,
+      forceUpdate: false,
+      parentGroup: "Triggers"
+    });
   }
 }
 
@@ -136,18 +193,13 @@ function updateThrowItemChoices(items) {
 // -------------------------
 function handleAction(actionId, data) {
   switch (actionId) {
-    case "tits.refreshItems":
+    case "tits.refreshPlugin":
       if (titsClient && titsClient.readyState === WebSocket.OPEN) {
-        titsClient.send(
-          JSON.stringify({
-            apiName: "TITSPublicApi",
-            apiVersion: "1.0",
-            messageType: "TITSItemListRequest"
-          })
-        );
-        logMessage("info", "Requested new item list from TITS");
+        titsClient.send(JSON.stringify({ apiName: "TITSPublicApi", apiVersion: "1.0", messageType: "TITSItemListRequest" }));
+        titsClient.send(JSON.stringify({ apiName: "TITSPublicApi", apiVersion: "1.0", messageType: "TITSTriggerListRequest" }));
+        logMessage("info", "Requested new item & trigger list from TITS");
       } else {
-        logMessage("warn", "TITS WebSocket not open, cannot refresh items");
+        logMessage("warn", "TITS WebSocket not open, cannot refresh lists");
       }
       break;
 
@@ -155,110 +207,100 @@ function handleAction(actionId, data) {
       const itemName = data.find((d) => d.id === "item")?.value || "";
       const amount = parseInt(data.find((d) => d.id === "amountOfThrows")?.value || "1", 10);
       const delay = parseFloat(data.find((d) => d.id === "delayTime")?.value || "0.05");
-      const errorOnMissingID =
-        (data.find((d) => d.id === "errorOnMissingID")?.value || "false") === "true";
+      const errorOnMissingID = (data.find((d) => d.id === "errorOnMissingID")?.value || "false") === "true";
 
-      logMessage("info", "tits.throwItem triggered", { itemName, amount, delay, errorOnMissingID });
-
-      if (!itemName) {
-        logMessage("warn", "No item specified in tits.throwItem payload");
-        return;
-      }
-
-      const itemObj = cachedItems.find(
-        (i) =>
-          i.name === itemName ||
-          i.itemName === itemName ||
-          i.id === itemName ||
-          i.ID === itemName
-      );
-
+      const itemObj = cachedItems.find((i) => [i.name, i.itemName, i.id, i.ID].includes(itemName));
       if (!itemObj) {
         logMessage("warn", "Item not found in cachedItems", { itemName });
         return;
       }
 
-      const itemId = itemObj.ID || itemObj.id || null;
+      const itemId = itemObj.ID || itemObj.id;
       if (!itemId) {
-        logMessage("error", "No valid ID for selected item", { itemObj });
+        logMessage("error", "Selected item has no ID", { itemObj });
         return;
       }
 
-      if (titsClient && titsClient.readyState === WebSocket.OPEN) {
-        const throwPayload = {
-          apiName: "TITSPublicApi",
-          apiVersion: "1.0",
-          requestID: Date.now().toString(),
-          messageType: "TITSThrowItemsRequest",
-          data: {
-            items: [itemId],
-            delayTime: delay,
-            amountOfThrows: amount,
-            errorOnMissingID
-          }
-        };
+      const payload = {
+        apiName: "TITSPublicApi",
+        apiVersion: "1.0",
+        requestID: Date.now().toString(),
+        messageType: "TITSThrowItemsRequest",
+        data: { items: [itemId], delayTime: delay, amountOfThrows: amount, errorOnMissingID }
+      };
 
-        titsClient.send(JSON.stringify(throwPayload));
-        logMessage("info", "Sent TITSThrowItemsRequest", throwPayload);
+      if (titsClient && titsClient.readyState === WebSocket.OPEN) {
+        titsClient.send(JSON.stringify(payload));
+        logMessage("info", "Sent TITSThrowItemsRequest", payload);
       } else {
-        logMessage("warn", "TITS WebSocket not open, cannot send throwItem request");
+        logMessage("warn", "TITS WebSocket not open, cannot send throw request");
       }
       break;
     }
 
     case "tits.throwItems": {
-      const itemsRaw = data.find((d) => d.id === "items")?.value || "";
+      const names = (data.find((d) => d.id === "items")?.value || "").split(",").map((s) => s.trim()).filter(Boolean);
       const amount = parseInt(data.find((d) => d.id === "amountOfThrows")?.value || "1", 10);
       const delay = parseFloat(data.find((d) => d.id === "delayTime")?.value || "0.05");
-      const errorOnMissingID =
-        (data.find((d) => d.id === "errorOnMissingID")?.value || "false") === "true";
+      const errorOnMissingID = (data.find((d) => d.id === "errorOnMissingID")?.value || "false") === "true";
 
-      const itemNames = itemsRaw.split(",").map((s) => s.trim()).filter(Boolean);
+      const ids = names.map((n) => {
+        const obj = cachedItems.find((i) => [i.name, i.itemName, i.id, i.ID].includes(n));
+        return obj ? obj.ID || obj.id : null;
+      }).filter(Boolean);
 
-      logMessage("info", "tits.throwItems triggered", { itemNames, amount, delay, errorOnMissingID });
-
-      if (itemNames.length === 0) {
-        logMessage("warn", "No items specified in tits.throwItems payload");
+      if (ids.length === 0) {
+        logMessage("error", "No valid item IDs found for tits.throwItems", { names });
         return;
       }
 
-      const itemIds = [];
-      for (const name of itemNames) {
-        const itemObj = cachedItems.find(
-          (i) => i.name === name || i.itemName === name || i.id === name || i.ID === name
-        );
-
-        if (itemObj) {
-          const itemId = itemObj.ID || itemObj.id || null;
-          if (itemId) itemIds.push(itemId);
-        } else {
-          logMessage("warn", "Item not found in cachedItems", { name });
-        }
-      }
-
-      if (itemIds.length === 0) {
-        logMessage("error", "No valid item IDs found for tits.throwItems", { itemNames });
-        return;
-      }
+      const payload = {
+        apiName: "TITSPublicApi",
+        apiVersion: "1.0",
+        requestID: Date.now().toString(),
+        messageType: "TITSThrowItemsRequest",
+        data: { items: ids, delayTime: delay, amountOfThrows: amount, errorOnMissingID }
+      };
 
       if (titsClient && titsClient.readyState === WebSocket.OPEN) {
-        const throwPayload = {
-          apiName: "TITSPublicApi",
-          apiVersion: "1.0",
-          requestID: Date.now().toString(),
-          messageType: "TITSThrowItemsRequest",
-          data: {
-            items: itemIds,
-            delayTime: delay,
-            amountOfThrows: amount,
-            errorOnMissingID
-          }
-        };
-
-        titsClient.send(JSON.stringify(throwPayload));
-        logMessage("info", "Sent TITSThrowItemsRequest (multiple)", throwPayload);
+        titsClient.send(JSON.stringify(payload));
+        logMessage("info", "Sent TITSThrowItemsRequest (multiple)", payload);
       } else {
         logMessage("warn", "TITS WebSocket not open, cannot send throwItems request");
+      }
+      break;
+    }
+
+    case "tits.triggerthrow": {
+      // SINGLE trigger activation — API requires triggerID as a string (not an array)
+      const triggerName = data.find((d) => d.id === "trigger")?.value || "";
+      const errorOnMissingID = (data.find((d) => d.id === "errorOnMissingID")?.value || "false") === "true";
+
+      const triggerObj = cachedTriggers.find((t) => [t.name, t.displayName, t.id, t.ID].includes(triggerName));
+      if (!triggerObj) {
+        logMessage("warn", "Trigger not found in cachedTriggers", { triggerName });
+        return;
+      }
+
+      const triggerId = triggerObj.id || triggerObj.ID;
+      if (!triggerId) {
+        logMessage("error", "Selected trigger has no ID", { triggerObj });
+        return;
+      }
+
+      const payload = {
+        apiName: "TITSPublicApi",
+        apiVersion: "1.0",
+        requestID: Date.now().toString(),
+        messageType: "TITSTriggerActivateRequest",
+        data: { triggerID: triggerId, errorOnMissingID } // <-- single string as required by API
+      };
+
+      if (titsClient && titsClient.readyState === WebSocket.OPEN) {
+        titsClient.send(JSON.stringify(payload));
+        logMessage("info", "Sent TITSTriggerActivateRequest", payload);
+      } else {
+        logMessage("warn", "TITS WebSocket not open, cannot send trigger activation");
       }
       break;
     }
@@ -269,49 +311,38 @@ function handleAction(actionId, data) {
 }
 
 // -------------------------
-// TITS WEBSOCKET CONNECTION
+// TITS CONNECTION
 // -------------------------
 function connectToTITS() {
   titsClient = new WebSocket(TITS_WS_URL);
 
   titsClient.on("open", () => {
     logMessage("info", "Connected to TITS WebSocket");
-
-    // Request item list at startup
-    titsClient.send(
-      JSON.stringify({
-        apiName: "TITSPublicApi",
-        apiVersion: "1.0",
-        messageType: "TITSItemListRequest"
-      })
-    );
+    // Ask for items and triggers at startup
+    titsClient.send(JSON.stringify({ apiName: "TITSPublicApi", apiVersion: "1.0", messageType: "TITSItemListRequest" }));
+    titsClient.send(JSON.stringify({ apiName: "TITSPublicApi", apiVersion: "1.0", messageType: "TITSTriggerListRequest" }));
   });
 
   titsClient.on("message", (data) => {
     try {
       let text = data.toString().trim();
 
+      // unwrap double-encoded JSON if TITS sends that
       if (text.startsWith('"') && text.endsWith('"')) {
         text = text.slice(1, -1).replace(/\\"/g, '"');
       }
 
       const msg = JSON.parse(text);
-      logMessage("debug", "Received from TITS", msg);
 
       if (msg.messageType === "TITSItemListResponse" && msg.data?.items) {
-        cachedItems = msg.data.items;
+        updateThrowItemChoices(msg.data.items);
+      }
 
-        fs.writeFileSync("items_list.txt", JSON.stringify(cachedItems, null, 2));
-        logMessage("info", `Got ${cachedItems.length} items from TITS`);
-
-        // Update Touch Portal with items + states
-        updateThrowItemChoices(cachedItems);
+      if (msg.messageType === "TITSTriggerListResponse" && msg.data?.triggers) {
+        updateTriggerStates(msg.data.triggers);
       }
     } catch (err) {
-      logMessage("error", "Failed to parse TITS data", {
-        data: data.toString(),
-        err: err.message
-      });
+      logMessage("error", "Failed to parse TITS data", { err: err.message, raw: data.toString() });
     }
   });
 
@@ -326,8 +357,8 @@ function connectToTITS() {
 }
 
 // -------------------------
-// START PLUGIN
+// START
 // -------------------------
 connectToTouchPortal();
 connectToTITS();
-logMessage("info", "TITS Plugin started (dynamic mode) and waiting for Touch Portal messages...");
+logMessage("info", "TITS Plugin started (items + triggers dynamic mode)");

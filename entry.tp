@@ -18,11 +18,11 @@
       "actions": [
         {
           "id": "tits.throwItem",
-          "name": "Throw Item",
+          "name": "Throw One Item Type",
           "prefix": "TITS",
           "type": "communicate",
           "tryInline": true,
-          "format": "Throw Item:{$item$} Amount:{$amountOfThrows$} delay in seconds:{$delayTime$}",
+          "format": "Throw Item:{$item$} Amount:{$amountOfThrows$} Delay In Seconds:{$delayTime$}",
           "data": [
             {
               "id": "item",
@@ -57,11 +57,11 @@
         },
         {
           "id": "tits.throwItems",
-          "name": "Throw Items",
+          "name": "Throw Multiple Item Types",
           "prefix": "TITS",
           "type": "communicate",
           "tryInline": true,
-          "format": "Throw Items:{$items$} Amount:{$amountOfThrows$} delay in seconds:{$delayTime$}",
+          "format": "Throw Items:{$items$} Amount:{$amountOfThrows$} Delay In Seconds:{$delayTime$}",
           "data": [
             {
               "id": "items",
@@ -95,12 +95,37 @@
           ]
         },
         {
-          "id": "tits.refreshItems",
-          "name": "Refresh Item List",
+          "id": "tits.triggerthrow",
+          "name": "Trigger A Single Throw",
           "prefix": "TITS",
           "type": "communicate",
           "tryInline": true,
-          "format": "Refresh T.I.T.S. item list",
+          "format": "Trigger Throw:{$trigger$}",
+          "data": [
+            {
+              "id": "trigger",
+              "type": "choice",
+              "label": "Trigger",
+              "default": "Loading...",
+              "valueChoices": [],
+            },
+            {
+              "id": "errorOnMissingID",
+              "type": "choice",
+              "label": "Error on Missing ID",
+              "default": "false",
+              "valueChoices": ["true", "false"],
+              "description": "Throw error if item ID is missing"
+            }
+          ]
+        },
+        {
+          "id": "tits.refreshPlugin",
+          "name": "Refresh The Plugin",
+          "prefix": "TITS",
+          "type": "communicate",
+          "tryInline": true,
+          "format": "Refresh T.I.T.S. Plugin",
           "data": []
         }
       ],

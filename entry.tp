@@ -5,21 +5,20 @@
   "id": "tits.connector",
   "description": "A Touch Portal plugin that connects to T.I.T.S. (This Is The Stream) via WebSocket for triggering VTuber interactions.",
   "configuration": {
-    "colorDark": "#222222",
-    "colorLight": "#444444",
+    "colorDark": "#000000ff",
+    "colorLight": "#FF78E8",
     "parentCategory": "misc"
   },
   "plugin_start_cmd": "node \"%TP_PLUGIN_FOLDER%TITS-Plugin\\index.js\"",
   "categories": [
     {
       "id": "tits.cat",
-      "name": "TITS Tools",
+      "name": "T.I.T.S.",
       "imagepath": "%TP_PLUGIN_FOLDER%TITS-Plugin\\TITS-Icon.png",
       "actions": [
         {
           "id": "tits.throwItem",
           "name": "Throw One Item Type",
-          "prefix": "TITS",
           "type": "communicate",
           "tryInline": true,
           "format": "Throw Item:{$item$} Amount:{$amountOfThrows$} Delay In Seconds:{$delayTime$}",
@@ -36,14 +35,12 @@
               "type": "text",
               "label": "Amount of Throws",
               "default": "1",
-              "description": "How many times to throw"
             },
             {
               "id": "delayTime",
               "type": "text",
               "label": "Delay Time (seconds)",
               "default": "0.05",
-              "description": "Delay between throws"
             },
             {
               "id": "errorOnMissingID",
@@ -51,14 +48,12 @@
               "label": "Error on Missing ID",
               "default": "false",
               "valueChoices": ["true", "false"],
-              "description": "Throw error if item ID is missing"
             }
           ]
         },
         {
           "id": "tits.throwItems",
           "name": "Throw Multiple Item Types",
-          "prefix": "TITS",
           "type": "communicate",
           "tryInline": true,
           "format": "Throw Items:{$items$} Amount:{$amountOfThrows$} Delay In Seconds:{$delayTime$}",
@@ -68,21 +63,18 @@
               "type": "text",
               "label": "Items",
               "default": "",
-              "description": "List of items to throw. Set commas between each one"
             },
             {
               "id": "amountOfThrows",
               "type": "text",
               "label": "Amount of Throws",
               "default": "1",
-              "description": "How many times to throw"
             },
             {
               "id": "delayTime",
               "type": "text",
               "label": "Delay Time (seconds)",
               "default": "0.05",
-              "description": "Delay between throws"
             },
             {
               "id": "errorOnMissingID",
@@ -90,17 +82,15 @@
               "label": "Error on Missing ID",
               "default": "false",
               "valueChoices": ["true", "false"],
-              "description": "Throw error if item ID is missing"
             }
           ]
         },
         {
           "id": "tits.triggerthrow",
-          "name": "Trigger A Single Throw",
-          "prefix": "TITS",
+          "name": "Start A Trigger",
           "type": "communicate",
           "tryInline": true,
-          "format": "Trigger Throw:{$trigger$}",
+          "format": "Start Trigger:{$trigger$}",
           "data": [
             {
               "id": "trigger",
@@ -115,14 +105,12 @@
               "label": "Error on Missing ID",
               "default": "false",
               "valueChoices": ["true", "false"],
-              "description": "Throw error if item ID is missing"
             }
           ]
         },
         {
           "id": "tits.refreshPlugin",
           "name": "Refresh The Plugin",
-          "prefix": "TITS",
           "type": "communicate",
           "tryInline": true,
           "format": "Refresh T.I.T.S. Plugin",
@@ -137,7 +125,6 @@
       "type": "text",
       "label": "Notes",
       "default": "",
-      "description": "This plugin connects to T.I.T.S. (Twitch Integrated Throwing Software)."
     },
     {
       "id": "debug",
@@ -145,7 +132,6 @@
       "label": "Enable Debug Logging",
       "default": "true",
       "valueChoices": ["true", "false"],
-      "description": "Enable extra console logs for debugging"
     }
   ]
 }

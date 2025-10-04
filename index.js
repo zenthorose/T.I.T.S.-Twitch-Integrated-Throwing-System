@@ -85,7 +85,6 @@ function sendToTP(obj) {
   try {
     tpClient.write(JSON.stringify(obj) + "\n");
   } catch (err) {
-    // keep logging locally if TP write fails
     console.error("Failed to send to TP", err.message);
   }
 }
@@ -98,21 +97,62 @@ function sanitizeId(name) {
   return name.replace(/[^\w\-]+/g, "_").replace(/^_+|_+$/g, "").substring(0, 64);
 }
 
+function readLeftNamesFromFile(filePath) {
+  // Read file lines and return sanitized left-side names (before first ':')
+  try {
+    const content = fs.readFileSync(filePath, "utf8");
+    return content
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const idx = line.indexOf(":");
+        const left = idx >= 0 ? line.slice(0, idx).trim() : line;
+        return sanitizeId(left);
+      })
+      .filter(Boolean);
+  } catch (err) {
+    return [];
+  }
+}
+
 // -------------------------
 // UPDATE ITEMS
 // -------------------------
-// Writes items_list.txt as "name : id" lines, updates choice list and creates states
 function updateThrowItemChoices(items) {
   if (!Array.isArray(items)) items = [];
+
+  // Always alphabetize by display name
+  items.sort((a, b) => {
+    const nameA = (a.itemName || a.name || a.id || "").toLowerCase();
+    const nameB = (b.itemName || b.name || b.id || "").toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
+
+  // -------------------------
+  // REMOVE OLD STATES (if any)
+  // -------------------------
+  const oldStateIds = readLeftNamesFromFile("items_list.txt"); // sanitized left-hand names
+  const newStateIds = items.map((i) => sanitizeId(i.itemName || i.name || i.id || "")).filter(Boolean);
+  const toRemove = oldStateIds.filter((id) => id && !newStateIds.includes(id));
+
+  for (const id of toRemove) {
+    try {
+      sendToTP({ type: "removeState", id });
+      logMessage("info", `Removed obsolete item state: ${id}`);
+    } catch (err) {
+      logMessage("error", "Failed to send removeState for item", { id, err: err.message });
+    }
+  }
+
+  // -------------------------
+  // UPDATE CACHE + CHOICES + FILE
+  // -------------------------
   cachedItems = items;
-
   const itemNames = items.map((i) => i.itemName || i.name || i.id || "");
-
-  // Update TP choice list for single-item actions
   sendToTP({ type: "choiceUpdate", id: "item", value: itemNames });
-  logMessage("info", `Updated tits.throwItem choices with ${itemNames.length} items`);
+  logMessage("info", `Updated tits.throwItem choices with ${itemNames.length} items (alphabetized)`);
 
-  // Persist items_list.txt in "name : id" format (like triggers_list)
   try {
     const lines = items.map((i) => {
       const name = i.itemName || i.name || i.id || "";
@@ -120,12 +160,14 @@ function updateThrowItemChoices(items) {
       return `${name} : ${id}`;
     });
     fs.writeFileSync("items_list.txt", lines.join("\n"), "utf8");
-    logMessage("info", `Wrote ${lines.length} items to items_list.txt`);
+    logMessage("info", `Wrote ${lines.length} items to items_list.txt (alphabetized)`);
   } catch (err) {
     logMessage("error", "Failed to write items_list.txt", err.message);
   }
 
-  // Create TP states for each item
+  // -------------------------
+  // CREATE/UPDATE STATES
+  // -------------------------
   for (const item of items) {
     const rawName = item.itemName || item.name || item.id || "";
     const stateId = sanitizeId(rawName);
@@ -148,11 +190,42 @@ function updateThrowItemChoices(items) {
 // -------------------------
 function updateTriggerStates(triggers) {
   if (!Array.isArray(triggers)) triggers = [];
+
+  // Always alphabetize by display name
+  triggers.sort((a, b) => {
+    const nameA = (a.displayName || a.name || a.id || "").toLowerCase();
+    const nameB = (b.displayName || b.name || b.id || "").toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
+
+  // -------------------------
+  // REMOVE OLD STATES (if any)
+  // -------------------------
+  const oldTriggerStateIds = readLeftNamesFromFile("triggers_list.txt");
+  const newTriggerStateIds = triggers
+    .map((t) => sanitizeId(t.name || t.displayName || t.id || ""))
+    .filter(Boolean);
+  const triggersToRemove = oldTriggerStateIds.filter((id) => id && !newTriggerStateIds.includes(id));
+
+  for (const id of triggersToRemove) {
+    try {
+      sendToTP({ type: "removeState", id });
+      logMessage("info", `Removed obsolete trigger state: ${id}`);
+    } catch (err) {
+      logMessage("error", "Failed to send removeState for trigger", { id, err: err.message });
+    }
+  }
+
+  // -------------------------
+  // UPDATE CACHE + CHOICES + FILE
+  // -------------------------
   cachedTriggers = triggers;
+  logMessage("info", `Updating ${triggers.length} triggers (alphabetized)`);
 
-  logMessage("info", `Updating ${triggers.length} triggers`);
+  const triggerNames = triggers.map((t) => t.displayName || t.name || t.id || "");
+  sendToTP({ type: "choiceUpdate", id: "trigger", value: triggerNames });
+  logMessage("info", `Updated trigger choice list with ${triggerNames.length} entries (alphabetized)`);
 
-  // Write triggers_list.txt in "name : id" format
   try {
     const lines = triggers.map((t) => {
       const name = t.name || t.displayName || t.id || "";
@@ -160,17 +233,14 @@ function updateTriggerStates(triggers) {
       return `${name} : ${id}`;
     });
     fs.writeFileSync("triggers_list.txt", lines.join("\n"), "utf8");
-    logMessage("info", `Wrote ${lines.length} triggers to triggers_list.txt`);
+    logMessage("info", `Wrote ${lines.length} triggers to triggers_list.txt (alphabetized)`);
   } catch (err) {
     logMessage("error", "Failed to write triggers_list.txt", err.message);
   }
 
-  // Update TP choice list for trigger selection (single select)
-  const triggerNames = triggers.map((t) => t.displayName || t.name || t.id || "");
-  sendToTP({ type: "choiceUpdate", id: "trigger", value: triggerNames });
-  logMessage("info", `Updated trigger choice list with ${triggerNames.length} entries`);
-
-  // Create TP states for each trigger
+  // -------------------------
+  // CREATE/UPDATE STATES
+  // -------------------------
   for (const trigger of triggers) {
     const rawName = trigger.name || trigger.displayName || trigger.id || "";
     const stateId = sanitizeId(rawName);
@@ -272,7 +342,6 @@ function handleAction(actionId, data) {
     }
 
     case "tits.triggerthrow": {
-      // SINGLE trigger activation — API requires triggerID as a string (not an array)
       const triggerName = data.find((d) => d.id === "trigger")?.value || "";
       const errorOnMissingID = (data.find((d) => d.id === "errorOnMissingID")?.value || "false") === "true";
 
@@ -293,7 +362,7 @@ function handleAction(actionId, data) {
         apiVersion: "1.0",
         requestID: Date.now().toString(),
         messageType: "TITSTriggerActivateRequest",
-        data: { triggerID: triggerId, errorOnMissingID } // <-- single string as required by API
+        data: { triggerID: triggerId, errorOnMissingID }
       };
 
       if (titsClient && titsClient.readyState === WebSocket.OPEN) {
@@ -318,20 +387,22 @@ function connectToTITS() {
 
   titsClient.on("open", () => {
     logMessage("info", "Connected to TITS WebSocket");
-    // Ask for items and triggers at startup
+
+    // Request lists
     titsClient.send(JSON.stringify({ apiName: "TITSPublicApi", apiVersion: "1.0", messageType: "TITSItemListRequest" }));
     titsClient.send(JSON.stringify({ apiName: "TITSPublicApi", apiVersion: "1.0", messageType: "TITSTriggerListRequest" }));
+
+    // Ensure files exist on startup (empty if no response yet)
+    updateThrowItemChoices(cachedItems);
+    updateTriggerStates(cachedTriggers);
   });
 
   titsClient.on("message", (data) => {
     try {
       let text = data.toString().trim();
-
-      // unwrap double-encoded JSON if TITS sends that
       if (text.startsWith('"') && text.endsWith('"')) {
         text = text.slice(1, -1).replace(/\\"/g, '"');
       }
-
       const msg = JSON.parse(text);
 
       if (msg.messageType === "TITSItemListResponse" && msg.data?.items) {
@@ -361,4 +432,9 @@ function connectToTITS() {
 // -------------------------
 connectToTouchPortal();
 connectToTITS();
+
+// Ensure files exist immediately even if TITS never connects
+updateThrowItemChoices(cachedItems);
+updateTriggerStates(cachedTriggers);
+
 logMessage("info", "TITS Plugin started (items + triggers dynamic mode)");

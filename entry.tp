@@ -1,0 +1,137 @@
+{
+  "api": 10,
+  "version": 1,
+  "name": "TITS Plugin",
+  "id": "tits.connector",
+  "description": "A Touch Portal plugin that connects to T.I.T.S. (This Is The Stream) via WebSocket for triggering VTuber interactions.",
+  "configuration": {
+    "colorDark": "#000000ff",
+    "colorLight": "#FF78E8",
+    "parentCategory": "misc"
+  },
+  "plugin_start_cmd_windows": "\"%TP_PLUGIN_FOLDER%TITS-Plugin\\TITS-Plugin.exe\"",
+  "categories": [
+    {
+      "id": "tits.cat",
+      "name": "T.I.T.S.",
+      "imagepath": "%TP_PLUGIN_FOLDER%TITS-Plugin\\TITS-Icon.png",
+      "actions": [
+        {
+          "id": "tits.throwItem",
+          "name": "Throw One Item Type",
+          "type": "communicate",
+          "tryInline": true,
+          "format": "Throw Item:{$item$} Amount:{$amountOfThrows$} Delay In Seconds:{$delayTime$}",
+          "data": [
+            {
+              "id": "item",
+              "type": "choice",
+              "label": "Item",
+              "default": "Loading...",
+              "valueChoices": [],
+            },
+            {
+              "id": "amountOfThrows",
+              "type": "text",
+              "label": "Amount of Throws",
+              "default": "1",
+            },
+            {
+              "id": "delayTime",
+              "type": "text",
+              "label": "Delay Time (seconds)",
+              "default": "0.05",
+            },
+            {
+              "id": "errorOnMissingID",
+              "type": "choice",
+              "label": "Error on Missing ID",
+              "default": "false",
+              "valueChoices": ["true", "false"],
+            }
+          ]
+        },
+        {
+          "id": "tits.throwItems",
+          "name": "Throw Multiple Item Types",
+          "type": "communicate",
+          "tryInline": true,
+          "format": "Throw Items:{$items$} Amount:{$amountOfThrows$} Delay In Seconds:{$delayTime$}",
+          "data": [
+            {
+              "id": "items",
+              "type": "text",
+              "label": "Items",
+              "default": "",
+            },
+            {
+              "id": "amountOfThrows",
+              "type": "text",
+              "label": "Amount of Throws",
+              "default": "1",
+            },
+            {
+              "id": "delayTime",
+              "type": "text",
+              "label": "Delay Time (seconds)",
+              "default": "0.05",
+            },
+            {
+              "id": "errorOnMissingID",
+              "type": "choice",
+              "label": "Error on Missing ID",
+              "default": "false",
+              "valueChoices": ["true", "false"],
+            }
+          ]
+        },
+        {
+          "id": "tits.triggerthrow",
+          "name": "Start A Trigger",
+          "type": "communicate",
+          "tryInline": true,
+          "format": "Start Trigger:{$trigger$}",
+          "data": [
+            {
+              "id": "trigger",
+              "type": "choice",
+              "label": "Trigger",
+              "default": "Loading...",
+              "valueChoices": [],
+            },
+            {
+              "id": "errorOnMissingID",
+              "type": "choice",
+              "label": "Error on Missing ID",
+              "default": "false",
+              "valueChoices": ["true", "false"],
+            }
+          ]
+        },
+        {
+          "id": "tits.refreshPlugin",
+          "name": "Refresh The Plugin",
+          "type": "communicate",
+          "tryInline": true,
+          "format": "Refresh T.I.T.S. Plugin",
+          "data": []
+        }
+      ],
+    }
+  ],
+  "settings": [
+    {
+      "name":"Debug Logging",
+      "default":"False",
+      "type": "choice",
+      "choices": ["True", "False"],
+      "isPassword":false,
+      "readOnly":false
+    },
+    {
+      "name": "TITS Port",
+      "type": "number",
+      "default": "42069",
+    }
+  ]
+}

@@ -119,7 +119,7 @@ All logs are toggleable and stored in `plugin-debug.log` in the same directory a
 
 ## Bugs and Enhancements
 
-- Report bugs via [Touch Portal T.I.T.S. Issues](https://github.com/zenthorose/T.I.T.S.-Twitch-Integrated-Throwing-System/issues) or in the Official Touch Portal Twitch-Integrated-Throwing-System channel!
+- Report bugs via [Touch Portal T.I.T.S. Issues](https://github.com/zenthorose/T.I.T.S.-Twitch-Integrated-Throwing-System/issues) or in the Official Touch Portal [Twitch-Integrated-Throwing-System channel](https://discord.gg/qMcJMVCAqc)!
 
 ---
 
